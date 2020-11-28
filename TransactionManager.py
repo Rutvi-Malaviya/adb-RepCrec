@@ -28,8 +28,8 @@ class TransactionManager:
         tokens = re.findall(r"[\w']+",command)
         # print('tokens:',tokens)     
         self.process_instruction(tokens[0],tokens[1:])
-        if self.resolve_deadlock():
-            self.execute_operations()
+#         if self.resolve_deadlock():
+        self.execute_operations()
         self.timestamp = self.timestamp + 1
             
     def process_instruction(self, cmd, args):
