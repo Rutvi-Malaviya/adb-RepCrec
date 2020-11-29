@@ -1,4 +1,5 @@
 import re
+import sys
 from Transaction import Transaction
 from DataManager import DataManager
 from collections import defaultdict
@@ -53,6 +54,7 @@ class TransactionManager:
         # print('tokens:',tokens)     
 
         self.processInstruction(tokens[0],tokens[1:])
+        self.executeOperations()
         if self.resolveDeadlock():
             self.executeOperations()
 
@@ -373,23 +375,24 @@ class TransactionManager:
                 for node, adjList in waitsForGraph.items():
                     graph[node].update(adjList)
 
-        # print(dict(blocking_graph))
+        # print(dict(graph))
 
         newestTransId = None
         newestTransTs = -1
 
-        for node in graph.keys():
+        for node in list(graph.keys()):
             visited = set()
             if self.hasCycle(node, node, visited, graph):
-                if self.transactionQueue[node].timestamp < newestTransTs:
+                if self.transactionQueue[node].timestamp > newestTransTs:
                     newestTransId = node
                     newestTransTs = self.transactionQueue[node].timestamp
+
         if newestTransId:
             print("Deadlock detected: aborting {}".format(newestTransId))
             self.abort(newestTransId)
             return True
 
-        return True
+        return False
 
     def hasCycle(self, curr, root, visited, graph):
         '''
