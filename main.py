@@ -14,13 +14,15 @@ if __name__ == "__main__":
         except IOError:
             print('Error while opening file {}'.format(fileName))
     else:
-        print('filename not found for reading, reading input from command line. Enter exit to terminate')
+        print('Filename not found for reading')
+        print('reading input from command line')
+        print('Enter exit to terminate')
         while True:
             command = input()
             # print(command)
             if command.strip() == 'exit':
                 break
-            tm.process_line(command)
+            tm.processLine(command)
 
 
             
