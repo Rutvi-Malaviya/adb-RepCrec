@@ -406,47 +406,80 @@ class DataManager:
     
 
     def generateWaitsForGraph(self):
+        '''
+        The method uses 2 helper functions defined below and return as graph.
+        The graph represents the transactions that conflict with one another.
+        '''
         
-        def current_blocks_queued(currentLock, queuedLock):
+        def currentConflicts(currentLock, queuedLock):
+            '''
+            currentLock: lock currently held 
+            queuedLock: pending lock request in the queue
+
+            The method returns a bool value indicating if the current lock conflicts with the pending request
+            '''
+
             if currentLock.lockType == 'R':
-                if queuedLock.lockType == 'R' or (len(currentLock.transactions) == 1 and queuedLock.transactions[0] in currentLock.transactions):
+                # If queued lock is R the n it does not conflict
+                # If queued lock is W but is requested by same transaction, and it is the only transaction holding R lock, it does not conflict 
+                if queuedLock.lockType == 'R' or (len(currentLock.transactions) == 1 and queuedLock.transactions[0] == currentLock.transactions[0]):
                     return False
 
                 return True
-            # current lock is W-lock
+
+            # current lock is W-lock, check if the transaction holding lock is same as the one requesting in the queue
             return not currentLock.transactions[0] == queuedLock.transactions[0]
 
-        def queued_blocks_queued(queued_lock_left, queued_lock_right):
-            if queued_lock_left.lockType == 'R' and queued_lock_right.lockType == 'R':
-                return False
-            # at least one lock is W-lock
-            return not queued_lock_left.transactions[0] == queued_lock_right.transactions[0]
+        def queuedBlocks(queuedBefore, queuedAfter):
+            '''
+            queuedBefore: lock appearing earlier in waiting queue
+            queuedAfter: lock apprearing later in waiting queue
 
+            The method returns a boolean value indicating a conflict between the two waiting requests.
+            '''
+
+            # If both the requests are for read, there is not conflict
+            if queuedBefore.lockType == 'R' and queuedAfter.lockType == 'R':
+                return False
+
+            # at least one lock is W-lock and hence there is a conflict if the transactions are not same
+            return (not (queuedBefore.transactions[0] == queuedAfter.transactions[0]))
+
+        
         graph = defaultdict(set)
 
         for var, lm in self.lockTable.items():
             if not lm.currentLock or len(lm.pendingRequests)==0:
                 continue
+
+            currLock = lm.currentLock
             
+            # Check for conflicts between current lock and pending lock requests
+
             for req in lm.pendingRequests:
-                if current_blocks_queued(lm.currentLock, req):
-                    if lm.currentLock.lockType == 'R':
-                        for t_id in lm.currentLock.transactions:
+                # check if request lock conflicts with current lock
+                if currentConflicts(currLock, req):
+                    if currLock.lockType == 'R':
+                        for t_id in currLock.transactions:
+                            # If the requesting transaction is not holding lock, add an edge in the graph
                             if t_id != req.transactions[0]:
-                                graph[req.transaction_id].add(t_id)
+                                graph[req.transactions[0]].add(t_id)
                     else:
-                        if lm.currentLock.transactions[0] != req.transactions[0]:
-                            graph[req.transactions[0]].add(lm.current_lock.transactions[0])
-            
-            for i in range(len(lm.transactions)):
+                        # If current lock is write and requesting transaction is not the same as current lock
+                        # holding transaction, add an edge in the graph
+                        if currLock.transactions[0] != req.transactions[0]:
+                            graph[req.transactions[0]].add(currLock.transactions[0])
+
+            # check for conflicts between the waiting lock requests   
+
+            for i in range(len(lm.pendingRequests)):
                 for j in range(i):
                     # print("queued_blocks_queued({}, {})".format(
                     #     lm.queue[j], lm.queue[i]))
-                    if queued_blocks_queued(lm.transactions[j], lm.transactions[i]):
+                    if queuedBlocks(lm.pendingRequests[j], lm.pendingRequests[i]):
                         # if lm.queue[j].transaction_id != lm.queue[i
                         # ].transaction_id:
-                        graph[lm.transactions[i]].add(
-                            lm.transactions[j])
+                        graph[lm.transactions[i]].add(lm.transactions[j])
         # print("graph {}={}".format(self.site_id, dict(graph)))
         return graph
         

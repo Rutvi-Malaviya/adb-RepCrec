@@ -53,9 +53,8 @@ class TransactionManager:
         # print('tokens:',tokens)     
 
         self.processInstruction(tokens[0],tokens[1:])
-        # if self.resolve_deadlock
-
-        self.executeOperations()
+        if self.resolveDeadlock():
+            self.executeOperations()
 
         self.timestamp = self.timestamp + 1
         
@@ -356,13 +355,18 @@ class TransactionManager:
 ############## DEADLOCK DETECTION ############
 
 
-    def resolve_deadlock(self):
+    def resolveDeadlock(self):
         '''
-        The method creates a graph for deadlock detection 
+        The method iterates over all data managers and gets the waits for graph from it.
+        It finds the youngest transaction
+
         '''
         # Detect deadlocks using cycle detection and abort the youngest transaction in the cycle.
         
         graph = defaultdict(set)
+
+        # Create the graph by updating the conflict edges in the graph dictionary
+        
         for dm in self.dataManagers:
             if dm.isUp:
                 waitsForGraph = dm.generateWaitsForGraph()
@@ -371,28 +375,37 @@ class TransactionManager:
 
         # print(dict(blocking_graph))
 
-        oldestTransId = None
-        oldestTransTs = -1
+        newestTransId = None
+        newestTransTs = -1
 
         for node in graph.keys():
             visited = set()
-            if hasCycle(node, node, visited, graph):
-                if self.transactionQueue[node].timestamp > oldestTransTs:
-                    oldestTransId = node
-                    oldestTransTs= self.transaction_table[node].ts
-        if oldestTransId:
-            print("Deadlock detected: aborting {}".format(oldestTransId))
-            self.abort(oldestTransId)
+            if self.hasCycle(node, node, visited, graph):
+                if self.transactionQueue[node].timestamp < newestTransTs:
+                    newestTransId = node
+                    newestTransTs = self.transactionQueue[node].timestamp
+        if newestTransId:
+            print("Deadlock detected: aborting {}".format(newestTransId))
+            self.abort(newestTransId)
             return True
-        return False
+
+        return True
 
     def hasCycle(self, curr, root, visited, graph):
-        # Helper function that detects cycle in blocking graph using dfs.
+        '''
+        curr: node from which graph is traversed
+        root: node on which cycle is checked
+        visited: set of nodes that have been visited
+        graph: dictionary containing conflict edges
+
+        The method traverses the graph in DFS fashion and checks if there is a cycle in the graph
+        '''
+        
         visited.add(curr)
         for adjNode in graph[curr]:
             if adjNode == root:
                 return True
             if adjNode not in visited:
-                if hasCycle(adjNode, root, visited, graph):
+                if self.hasCycle(adjNode, root, visited, graph):
                     return True
         return False

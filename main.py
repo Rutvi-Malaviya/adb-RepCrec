@@ -10,7 +10,7 @@ if __name__ == "__main__":
         try:
             with open(fileName, 'r') as f:
                 for command in f:
-                    tm.process_line(command)
+                    tm.processLine(command)
         except IOError:
             print('Error while opening file {}'.format(fileName))
     else:
