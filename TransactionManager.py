@@ -270,7 +270,7 @@ class TransactionManager:
 
                         # print("{} reads {}.{} = {}".format(trans_id, dm.siteId, var, val))
 
-                        print("{}: {}".format(var, val))
+                        print("{} reads {}: {}".format(trans_id, var, val))
                         return True
 
         return False
@@ -316,7 +316,7 @@ class TransactionManager:
                         self.transactionQueue[trans_id].addSite(dm.siteId)
                         sitesModified.append(dm.getSiteId())
 
-                print("Transaction {} writes {} with {} to the sites: {}".format(trans_id, var, val, sitesModified))
+                print("{} writes {} = {} to the sites: {}".format(trans_id, var, val, sitesModified))
                 return True
 
         return False
