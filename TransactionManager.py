@@ -17,9 +17,10 @@ class Operation:
         self.trans_id = trans_id
         self.var = var
         self.val = val
+        self.isNew = True
 
     def __repr__(self):
-        return '(' + self.cmd + ',' + self.trans_id + "," + self.var + ',' + self.val + ')'
+        return '(' + self.cmd + ',' + self.trans_id + "," + self.var + ',' + str(self.val) + ')'
 
 class TransactionManager:
     def __init__(self):
@@ -49,7 +50,7 @@ class TransactionManager:
         takes care of incrementing the timestamp
 
         '''
-
+        # print(command)
         tokens = re.findall(r"[\w']+",command)
         # print('tokens:',tokens)     
 
@@ -59,6 +60,9 @@ class TransactionManager:
             self.executeOperations()
 
         self.timestamp = self.timestamp + 1
+
+        # print('\n Remaining operatins: ',self.operationQueue)
+        # print('')
         
     def processInstruction(self, cmd, args):
         '''
@@ -124,10 +128,10 @@ class TransactionManager:
             trans_id = args[0]
 
             if(trans_id in self.transactionQueue.keys()):
-                if(self.transactionQueue[trans_id].canCommit()):
+                if (self.transactionQueue[trans_id]).canCommit:
                     self.commit(trans_id, self.timestamp)
                 else:
-                    self.abort(trans_id)
+                    self.abort(trans_id, True)
             else:
                 print("Transaction {} not found".format(trans_id))
 
@@ -135,19 +139,19 @@ class TransactionManager:
             # Call the fail method in the corresponding data manager 
             # change the can commit state of the transaction that has accessed that site to false
 
-            siteId = args[0]
+            siteId = int(args[0])
             dm = self.dataManagers[siteId-1]
             dm.fail()
             print("site {} fails".format(siteId))
 
-            for transaction in self.transactionQueue:
+            for transaction in self.transactionQueue.values():
                 if (not transaction.isReadOnly) and (transaction.canCommit) and (siteId in transaction.accessedSites):
                     transaction.canCommit = False
 
         elif cmd == 'recover':
             # Call the recover method in the corresponding data manager 
 
-            siteId = args[0]
+            siteId = int(args[0])
             dm = self.dataManagers[siteId-1]
             dm.recover(self.timestamp)
             print("site {} recovers".format(siteId))
@@ -191,6 +195,8 @@ class TransactionManager:
         for operation in self.operationQueue:
             trans_id = operation.trans_id
             var = operation.var
+            isNewOp = operation.isNew
+
             if trans_id in self.transactionQueue.keys():
                 success = False
                 
@@ -205,19 +211,19 @@ class TransactionManager:
                         transaction = self.transactionQueue[trans_id]
 
                         # Check if the variable exists in the snapshot and complete the operation if it does
-                        if var in transaction.db_snapshot.keys():
+                        if var in transaction.dbSnapshot.keys():
                             success = True
-                            print("{}: {}".format(var, self.transactionQueue[trans_id].db_snapshot[var]))
+                            print("{}: {}".format(var, self.transactionQueue[trans_id].dbSnapshot[var]))
                         else:
                             success = False
                             print("var not found")
                     else:
                         # If transaction is not read only, call the read method to perfrom the read operation
-                        success = self.read(trans_id, var)
+                        success = self.read(trans_id, var, isNewOp)
                 else:
                     # operation has to perform write
                     val = operation.val 
-                    success = self.write(trans_id, var, val)
+                    success = self.write(trans_id, var, val, isNewOp)
 
                 # If the operation was executed successfully add it to the remove queue
                 if success:
@@ -226,17 +232,18 @@ class TransactionManager:
                 # If the transaction id does not exist in the transactionQueue, add the operation to the remove queue
                 removeOperations.append(operation)
             
+            operation.isNew = False
         # Remove all the operations in the remove queue from the operationQueue
         for operation in removeOperations:
             self.operationQueue.remove(operation)
 
-        print("Remaining operations: ", self.operationQueue)
+        # print("Remaining operations: ", self.operationQueue)
 
 
 ########### READ - WRITE OPERATIONS ###############
 
 
-    def read(self, trans_id, var):
+    def read(self, trans_id, var, isNew):
         '''
         trans_id: transaction id
         var: variable name for which the read is to be performed
@@ -252,18 +259,18 @@ class TransactionManager:
                 # if the data manager is available, check if it has the variable 
                 # if it has variable, read the value from the data manager 
                 if dm.isUp and dm.hasVariable(var):
-                    result = dm.read(var)
+                    result = dm.read(trans_id, var, isNew)
 
                     if result:
                         # If the read was successful update the accessed site for the transaction
                         self.transactionQueue[trans_id].addSite(dm.siteId)
                         # print("{} reads {}.{}".format(trans_id, var, result.val))
-                        print("{}: {}", var, result)
+                        print("{}: {}".format(var, result))
                         return True
 
         return False
 
-    def write(self, trans_id, var, val):
+    def write(self, trans_id, var, val, isNew):
         '''
         trans_id: transaction id
         var: variable on which write is to be performed
@@ -272,6 +279,7 @@ class TransactionManager:
         The method uses the write method in the data manager
         '''
 
+        
         # Check if the transaction exists in the transactionQueue
         if trans_id in self.transactionQueue.keys():
             ts = self.transactionQueue[trans_id].timestamp
@@ -280,20 +288,22 @@ class TransactionManager:
             # hasAllWriteLocks tracks whether we can get write lock on all the sites having the variable
             allSitesDown = True
             hasAllWriteLocks = True
-
+            # sites=[]
             for dm in self.dataManagers:
-
+                
                 if dm.isUp and dm.hasVariable(var):
                     allSitesDown = False
-                    gaveLock = dm.getWriteLock(trans_id, var)
-
+                    gaveLock = dm.getWriteLock(trans_id, var, isNew)
+    
                     if not gaveLock:
                         hasAllWriteLocks = False
 
+            # print("Transaction {} tries to writes {} with {} ".format(trans_id, var, val))
+            # print("   allsitesdown = {}  hasAllWriteLocks = {}".format(str(allSitesDown), str(hasAllWriteLocks)))
+            
             # write only if all the available sites gives lock on the variable
             if (not allSitesDown) and (hasAllWriteLocks):
                 sitesModified = []
-                
                 for dm in self.dataManagers:
                     if dm.isUp and dm.hasVariable(var):
 
@@ -307,6 +317,8 @@ class TransactionManager:
                 print("Transaction {} writes {} with {} to the sites: {}".format(trans_id, var, val, sitesModified))
                 return True
 
+            # print('in write')
+            # print('remainning ops ',self.operationQueue)
         return False
 
 
@@ -328,7 +340,7 @@ class TransactionManager:
         self.transactionQueue.pop(trans_id)
         print("{} commits".format(trans_id))
 
-    def abort(self, trans_id):
+    def abort(self, trans_id, hasSiteFailure=False):
         '''
         trans_id: transaction id
 
@@ -351,7 +363,12 @@ class TransactionManager:
         for operation in removeList:
             self.operationQueue.remove(operation)
 
-        print("{} aborts".format(trans_id))
+        # print("{} aborts".format(trans_id))
+
+        if hasSiteFailure:
+            print("{} aborts due to site failure".format(trans_id))
+        else:
+            print("{} aborts due to deadlock".format(trans_id))
 
     
 ############## DEADLOCK DETECTION ############
@@ -388,7 +405,7 @@ class TransactionManager:
                     newestTransTs = self.transactionQueue[node].timestamp
 
         if newestTransId:
-            print("Deadlock detected: aborting {}".format(newestTransId))
+            # print("Deadlock detected: aborting {}".format(newestTransId))
             self.abort(newestTransId)
             return True
 

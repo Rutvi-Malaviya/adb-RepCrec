@@ -101,7 +101,7 @@ class DataManager:
 
         return snapshotList
 
-    def read(self, trans_id, var):
+    def read(self, trans_id, var, isNew):
         '''
         trans_id: transaction id
         var: variable name
@@ -134,14 +134,16 @@ class DataManager:
                         return tempVar.value
                     # If there is a conflict, add the current request to the queue
                     else:
-                        tempLock.pendingRequests.append(Lock(var, "R", [trans_id]))
+                        if isNew:
+                            tempLockManager.pendingRequests.append(Lock(var, "R", [trans_id]))
                         return None
                 # current lock is a write lock. Check if the lock is held by current transaction
                 elif trans_id in tempLock.transactions:
                     return tempVar.value
                 # If write lock is not held by current transaction, add the read request to the queue
                 else:
-                    tempLock.pendingRequests.append(Lock(var, "R", [trans_id]))
+                    if isNew:
+                        tempLockManager.pendingRequests.append(Lock(var, "R", [trans_id]))
                     return None
             else:
                 tempLockManager.currentLock = Lock(var, "R", [trans_id])
@@ -179,19 +181,19 @@ class DataManager:
                         # If current transaciton is the only transaction then check if there is a queued lock 
                         # that conflicts the current lock
                         if tempLockManager.hasQueuedWrite(trans_id):
-                            print("Cannot promote to W-lock, other process is waiting")
+                            # print("Cannot promote to W-lock, other process is waiting")
                             return None
                         else:
                             # promote the lock to write and write the variable with the given value in tempVar
                             # The variable will be written when the transaction commits
                             tempLockManager.promoteLock(trans_id)
-                            tempVar.tempVar[trans_id] = val
+                            tempVar.tempVal[trans_id] = val
                             return None
                     else:
-                        print("Other transactions holding R locks")
+                        # print("Other transactions holding R locks")
                         return None
                 else:
-                    print("transactions does not hold R locks")
+                    # print("transactions does not hold R locks")
                     return None
             elif tempLock.lockType == 'W':
                 # If current lock is W then check if the current transaction hold lock and perform approporiate actions
@@ -199,7 +201,7 @@ class DataManager:
                     tempVar.tempVal[trans_id] = val
                     return None
                 else:
-                    print("Other transaction having W lock")
+                    # print("Other transaction having W lock")
                     return None
 
         # If not lock is held on the variable, give the transaction the write lock
@@ -209,7 +211,7 @@ class DataManager:
 
 ########## LOCK ASSIGNMENT OPERATIONS #############
 
-    def getWriteLock(self, trans_id, var):
+    def getWriteLock(self, trans_id, var, isNew):
         '''
         trans_id: transaction id
         var: name of the variable
@@ -238,18 +240,22 @@ class DataManager:
                         # If current transaciton is the only transaction then check if there is a queued lock 
                         # that conflicts the current lock
                         if tempLockManager.hasQueuedWrite(trans_id):
-                            tempLockManager.pendingRequests.append(Lock(var, 'W', [trans_id]))
-                            print("Cannot promote to W-lock, other process is waiting")
+                            if isNew:
+                                tempLockManager.pendingRequests.append(Lock(var, 'W', [trans_id]))
+                            # print("Cannot promote to W-lock, other process is waiting")
                             return False
                         else:
                             return True
                     else:
-                        tempLockManager.pendingRequests.append(Lock(var, 'W', [trans_id]))
-                        print("Other transactions holding R locks")
+                        if isNew:
+                            tempLockManager.pendingRequests.append(Lock(var, 'W', [trans_id]))
+                        # print("Other transactions holding R locks")
                         return False
                 else:
                     # Other transactions hold the read lock and current transaction does not hold the read lock
-                    print("transactions does not hold R locks")
+                    # print("transactions does not hold R locks")
+                    if isNew:
+                        tempLockManager.pendingRequests.append(Lock(var, 'W', [trans_id]))
                     return False
 
             # check if current lock if of type write
@@ -257,8 +263,9 @@ class DataManager:
                 if trans_id in tempLock.transactions:
                     return True
                 else:
-                    tempLockManager.pendingRequests.append(Lock(var, 'W', [trans_id]))
-                    print("Other transaction having W lock")
+                    if isNew:
+                        tempLockManager.pendingRequests.append(Lock(var, 'W', [trans_id]))
+                    # print("Other transaction having W lock")
                     return False
         return True
 
@@ -346,18 +353,9 @@ class DataManager:
         '''
 
         for lockManager in self.lockTable.values():
-            tempLock = lockManager.currentLock
-
-            # Release the locks held by transaction 
-            if tempLock and trans_id in tempLock.transactions:
-                tempLock.transactions.remove(trans_id)
-                if len(tempLock.transactions) == 0:
-                    lockManager.currentLock = None
-
-            #  Check if the transaction has any pending lock requests
-            for pending in lockManager.pendingRequests:
-                if trans_id in pending.transactions:
-                    print('Cannot commit: unresolved queue locks')
+            if not lockManager.removeLocks(trans_id):
+                return None
+              
            
         # Write the tempVal written by transaction to the variable value.
         # Make the variable readable which may have been rendered false at site failure
@@ -367,6 +365,12 @@ class DataManager:
                 var.value = var.tempVal[trans_id]
                 var.isReadable = True
                 var.lastWrite = ts
+
+        
+        # for lm in self.lockTable.values():
+        #     print('')
+            # print('', lm)
+        #     print('')
 
         self.resolveLockTable()
 
@@ -397,7 +401,7 @@ class DataManager:
         self.isUp = True
         self.upSince = ts
         
-        for var in self.variableList:
+        for var in self.variableList.values():
             if var.isReplicated:
                 var.isReadable = False
 
@@ -425,10 +429,11 @@ class DataManager:
                 if queuedLock.lockType == 'R' or (len(currentLock.transactions) == 1 and queuedLock.transactions[0] == currentLock.transactions[0]):
                     return False
 
+                # print('conflicts ',currentLock, queuedLock)
                 return True
 
             # current lock is W-lock, check if the transaction holding lock is same as the one requesting in the queue
-            return not currentLock.transactions[0] == queuedLock.transactions[0]
+            return (not (currentLock.transactions[0] == queuedLock.transactions[0]))
 
         def queuedBlocks(queuedBefore, queuedAfter):
             '''
@@ -446,6 +451,7 @@ class DataManager:
             return (not (queuedBefore.transactions[0] == queuedAfter.transactions[0]))
 
         
+        # print('\n lock table: {} \n'.format(self.lockTable))
         graph = defaultdict(set)
 
         for var, lm in self.lockTable.items():
@@ -479,7 +485,7 @@ class DataManager:
                     if queuedBlocks(lm.pendingRequests[j], lm.pendingRequests[i]):
                         # if lm.queue[j].transaction_id != lm.queue[i
                         # ].transaction_id:
-                        graph[lm.transactions[i]].add(lm.transactions[j])
-        # print("graph {}={}".format(self.site_id, dict(graph)))
+                        graph[lm.pendingRequests[i].transactions[0]].add(lm.pendingRequests[j].transactions[0])
+        # print("graph {}={}".format(self.siteId, dict(graph)))
         return graph
         
