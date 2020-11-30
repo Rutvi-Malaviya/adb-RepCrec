@@ -263,9 +263,9 @@ class DataManager:
                 if trans_id in tempLock.transactions:
                     return True
                 else:
+                    # print("Other transaction having W lock")
                     if isNew:
                         tempLockManager.pendingRequests.append(Lock(var, 'W', [trans_id]))
-                    # print("Other transaction having W lock")
                     return False
         return True
 
@@ -366,12 +366,8 @@ class DataManager:
                 var.isReadable = True
                 var.lastWrite = ts
 
+        # print('lock table: ',self.lockTable)
         
-        # for lm in self.lockTable.values():
-        #     print('')
-            # print('', lm)
-        #     print('')
-
         self.resolveLockTable()
 
 
@@ -429,7 +425,6 @@ class DataManager:
                 if queuedLock.lockType == 'R' or (len(currentLock.transactions) == 1 and queuedLock.transactions[0] == currentLock.transactions[0]):
                     return False
 
-                # print('conflicts ',currentLock, queuedLock)
                 return True
 
             # current lock is W-lock, check if the transaction holding lock is same as the one requesting in the queue
@@ -480,12 +475,9 @@ class DataManager:
 
             for i in range(len(lm.pendingRequests)):
                 for j in range(i):
-                    # print("queued_blocks_queued({}, {})".format(
-                    #     lm.queue[j], lm.queue[i]))
                     if queuedBlocks(lm.pendingRequests[j], lm.pendingRequests[i]):
-                        # if lm.queue[j].transaction_id != lm.queue[i
-                        # ].transaction_id:
                         graph[lm.pendingRequests[i].transactions[0]].add(lm.pendingRequests[j].transactions[0])
+                        
         # print("graph {}={}".format(self.siteId, dict(graph)))
         return graph
         

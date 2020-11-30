@@ -11,6 +11,7 @@ class Operation:
         trans_id: transaction id of the transaction requesting the operation
         var: variable for which the R or W operation is requested
         val: The value with which variable is updated in case of write operation. (not used in case of read operation)
+        isNew: Indicates if the operation is newly created or not
         '''
 
         self.cmd = cmd
@@ -51,7 +52,9 @@ class TransactionManager:
 
         '''
         # print(command)
+
         tokens = re.findall(r"[\w']+",command)
+
         # print('tokens:',tokens)     
 
         self.processInstruction(tokens[0],tokens[1:])
@@ -62,7 +65,6 @@ class TransactionManager:
         self.timestamp = self.timestamp + 1
 
         # print('\n Remaining operatins: ',self.operationQueue)
-        # print('')
         
     def processInstruction(self, cmd, args):
         '''
@@ -188,7 +190,8 @@ class TransactionManager:
         '''
         The method loops through the operation queue and executes the operations that can be executed.
         It keeps track of the executed operations and removes them from the queue at the end
-
+        Changes the isNew status of operation to false to indicate that it has been processed once.
+            This restrains the data manager to add the same lock request multiple times in the pending queue
         '''
        
         removeOperations = []
@@ -259,13 +262,15 @@ class TransactionManager:
                 # if the data manager is available, check if it has the variable 
                 # if it has variable, read the value from the data manager 
                 if dm.isUp and dm.hasVariable(var):
-                    result = dm.read(trans_id, var, isNew)
+                    val = dm.read(trans_id, var, isNew)
 
-                    if result:
+                    if val:
                         # If the read was successful update the accessed site for the transaction
                         self.transactionQueue[trans_id].addSite(dm.siteId)
-                        # print("{} reads {}.{}".format(trans_id, var, result.val))
-                        print("{}: {}".format(var, result))
+
+                        # print("{} reads {}.{} = {}".format(trans_id, dm.siteId, var, val))
+
+                        print("{}: {}".format(var, val))
                         return True
 
         return False
@@ -297,9 +302,6 @@ class TransactionManager:
     
                     if not gaveLock:
                         hasAllWriteLocks = False
-
-            # print("Transaction {} tries to writes {} with {} ".format(trans_id, var, val))
-            # print("   allsitesdown = {}  hasAllWriteLocks = {}".format(str(allSitesDown), str(hasAllWriteLocks)))
             
             # write only if all the available sites gives lock on the variable
             if (not allSitesDown) and (hasAllWriteLocks):
@@ -317,8 +319,6 @@ class TransactionManager:
                 print("Transaction {} writes {} with {} to the sites: {}".format(trans_id, var, val, sitesModified))
                 return True
 
-            # print('in write')
-            # print('remainning ops ',self.operationQueue)
         return False
 
 
