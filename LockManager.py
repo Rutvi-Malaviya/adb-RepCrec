@@ -12,6 +12,9 @@ class Lock:
         self.lockType = Ltype
         self.transactions = trans
 
+    def __repr__(self):
+        return '[varId: ' + self.varId + ", lockType: " + self.lockType + ", transactions: " + str(self.transactions) + "]"
+
 class LockManager:
     def __init__(self, var):
         '''
@@ -23,6 +26,29 @@ class LockManager:
         self.var = var
         self.currentLock = None
         self.pendingRequests = []
+
+    def __repr__(self):
+        return '[var: ' + self.var + ", currentLock: " + str(self.currentLock) + ", pending requests: " + str(self.pendingRequests) + "]"
+
+
+    def removeLocks(self, trans_id):
+        '''
+        trans_id: transaction id
+
+        Remove the lock when transaction commits 
+        '''
+        if self.currentLock and (trans_id in self.currentLock.transactions):
+            self.currentLock.transactions.remove(trans_id)
+
+            if len(self.currentLock.transactions)==0:
+                self.currentLock = None
+    
+        for req in self.pendingRequests:
+            if trans_id in req.transactions:
+                print('unresolved locks')
+                return False
+
+        return True
 
     def hasQueuedWrite(self, trans_id=None):
         '''
