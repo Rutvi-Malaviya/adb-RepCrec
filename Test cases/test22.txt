@@ -1,9 +1,0 @@
-begin(T1)
-begin(T2)
-W(T1,x2,4)
-R(T1,x1) 
-R(T1,x2) // nirman reads 4
-// reads 4 rutvi
-R(T2,x2)
-end(T1)
-end(T2)
