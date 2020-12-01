@@ -8,9 +8,11 @@ if __name__ == "__main__":
     tm = TransactionManager()
     if fileName:
         try:
+            print('\nfile: \n',fileName)
             with open(fileName, 'r') as f:
                 for command in f:
                     tm.processLine(command)
+            print('\n')
         except IOError:
             print('Error while opening file {}'.format(fileName))
     else:

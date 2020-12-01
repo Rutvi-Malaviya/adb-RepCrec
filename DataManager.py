@@ -107,6 +107,7 @@ class DataManager:
         var: variable name
 
         Read the variable from the site and return the value of possible, otherwise returns None
+        If transaction has changed value of the variable then it returns that temprary value
         '''
         
         tempVar = None
@@ -139,6 +140,9 @@ class DataManager:
                         return None
                 # current lock is a write lock. Check if the lock is held by current transaction
                 elif trans_id in tempLock.transactions:
+                    # If the transaction has previously written to the variable in the current transaction, get the value written by it
+                    if trans_id in tempVar.tempVal.keys():
+                        return tempVar.tempVal[trans_id]
                     return tempVar.value
                 # If write lock is not held by current transaction, add the read request to the queue
                 else:
@@ -477,7 +481,7 @@ class DataManager:
                 for j in range(i):
                     if queuedBlocks(lm.pendingRequests[j], lm.pendingRequests[i]):
                         graph[lm.pendingRequests[i].transactions[0]].add(lm.pendingRequests[j].transactions[0])
-                        
+
         # print("graph {}={}".format(self.siteId, dict(graph)))
         return graph
         

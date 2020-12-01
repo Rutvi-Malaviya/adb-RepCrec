@@ -52,10 +52,12 @@ class TransactionManager:
 
         '''
         # print(command)
-
+        if command[0]=='/': 
+            return 
+            
         tokens = re.findall(r"[\w']+",command)
 
-        # print('tokens:',tokens)     
+        # print('tokens:',tokens)      
 
         self.processInstruction(tokens[0],tokens[1:])
         self.executeOperations()
