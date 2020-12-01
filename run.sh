@@ -1,0 +1,1 @@
+for file in test_cases/*; do python main.py $file; done
